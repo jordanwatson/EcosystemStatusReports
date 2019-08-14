@@ -4,41 +4,55 @@ library(rgdal)
 library(forcats)
 library(gridExtra)
  
-#  Read in data from January 1, 2003
-mydata <- readRDS("Data/mur_SST_stat6_all_columns.RDS") %>% 
-  dplyr::select(sst.mean,date,everything())
 
-spatialdat <- mydata %>% 
-  dplyr::select(-c(sst.mean,date,sst.sd,year,month,julian,week)) %>% 
-  distinct()
+#  **** Jordan - for SSTs, we are going to keep GOA and BSAI separate, but
+#  look at the seasons that Nick Bond uses and divide the data into those seasons instead of the 
+#  winter/summer seasons that we have now.
+#  Autumn (top left) Sept to Nov
+#  Winter (top right) Dec to Feb of next year
+#  Spring (bottom left) Mar to May
+#  Summer (bottom right) Jun to August
 
-test <- bind_cols(readRDS("Data/myyear_2002_october.RDS")[1],
-                  readRDS("Data/myyear_2002_november.RDS")[1],
-                  readRDS("Data/myyear_2002_december.RDS")[1],
-                  readRDS("Data/myyear_2018_may.RDS")[1],
-                  readRDS("Data/myyear_2018_june.RDS")[1],
-                  readRDS("Data/myyear_2018_july.RDS")[1],
-                  readRDS("Data/myyear_2018_august.RDS")[1],
-                  readRDS("Data/myyear_2018_september.RDS")[1]) %>% 
-  dplyr::select(STAT_AREA,contains("mean")) %>% 
-  gather(date,sst.mean,-STAT_AREA) %>% 
-  mutate(date=substr(date,1,10)) %>% 
-  inner_join(
-    bind_cols(readRDS("Data/myyear_2002_october.RDS")[1],
-              readRDS("Data/myyear_2002_november.RDS")[1],
-              readRDS("Data/myyear_2002_december.RDS")[1],
-              readRDS("Data/myyear_2018_may.RDS")[1],
-              readRDS("Data/myyear_2018_june.RDS")[1],
-              readRDS("Data/myyear_2018_july.RDS")[1],
-              readRDS("Data/myyear_2018_august.RDS")[1],
-              readRDS("Data/myyear_2018_september.RDS")[1]) %>% 
-      dplyr::select(STAT_AREA,contains("sd")) %>% 
-      gather(date,sst.sd,-STAT_AREA) %>% 
-      mutate(date=substr(date,1,10))) %>% 
-  mutate(date=as.Date(date),
-         year=as.numeric(format(date,"%Y")),
-         month=as.numeric(format(date,"%m"))) %>% 
-  inner_join(spatialdat)
+#-------------------------------------------------------------------------------------------------------------
+#  Updating the data
+library(DBI)
+library(odbc)
+
+#-------------------------------------------------------------------------------------------------------------
+
+# To update the data with more recent dates use the following query
+con <- dbConnect(odbc::odbc(), "akfin", UID="jwatson", PWD= rstudioapi::askForPassword("Enter AKFIN Password"))
+my_tbl <- dbSendQuery(con,"SELECT * FROM afsc.erddap_sst_stat_area where read_date> timestamp '2019-03-02 09:00:00';")
+data <- dbFetch(my_tbl)
+saveRDS(data,file="Data/akfin_query_since_03022019.rds")
+dbDisconnect(con)
+
+#  Make the data conform with the current data (which go through May 10, 2018)
+newdata <- data %>% 
+  dplyr::select(-c(AREA_INDEX,USERNAME,AKFIN_LOAD_DATE,POINTS_COUNT)) %>% 
+  rename(date=READ_DATE,sst.mean=TEMP,sst.sd=S_DEV) %>% 
+  mutate(date=as.Date(date))
+
+new_date <- newdata %>% 
+  dplyr::select(date) %>% 
+  distinct() %>% 
+  mutate(year=as.numeric(format(date,"%Y")),
+         month=as.numeric(format(date,"%m")),
+         julian=as.POSIXlt(date)$yday+1,
+         week=as.numeric(format(date,"%U"))+1) %>% 
+  arrange(date)
+
+#  The following lines are commented out to avoid accidentally over-writing the data files
+#saveRDS(bind_rows(readRDS("Data/temperature_data.RDS"),newdata) %>% distinct(),file="Data/temperature_data.RDS")
+#saveRDS(bind_rows(readRDS("Data/date_data.RDS"),new_date) %>% distinct(),file="Data/date_data.RDS")
+#-------------------------------------------------------------------------------------------------------------
+
+
+mydata <- readRDS("Data/temperature_data.RDS") %>% 
+  left_join(readRDS("Data/date_data.RDS")) %>% 
+  left_join(readRDS("Data/spatial_data.RDS")) %>% 
+  data.frame 
+
 
 
 #  If you need to omit certain months due to incompleteness, modify the ifelse in "flag"
@@ -50,14 +64,20 @@ test <- bind_cols(readRDS("Data/myyear_2002_october.RDS")[1],
 #                     ifelse(newyr==2018 & month>3,1,0)))
 
 
-#  Join in the summer 2018 and winter 2002 data with the previous dataset.
 data2 <- mydata %>% 
-  bind_rows(test) %>% 
   filter(!is.na(sst.mean)) %>% 
-  mutate(newyr=ifelse(month<4,year-1,year),
-         season=ifelse(month%in%c(4:9),"Summer (Apr - Sept)","Winter (Oct - Mar)"),
-         monthname=month.name[month],
-         flag=0)
+  mutate(newyr=ifelse(month==12,year+1,year),
+         season=ifelse(month%in%c(9:11),"Sept-Nov",
+                       ifelse(month%in%c(12,1,2),"Dec-Feb",
+                              ifelse(month%in%c(3:5),"Mar-May","Jun-Aug"))))
+
+
+#data2 <- mydata %>% 
+#  filter(!is.na(sst.mean)) %>% 
+#  mutate(newyr=ifelse(month<4,year-1,year),
+#         season=ifelse(month%in%c(4:9),"Summer (Apr - Sept)","Winter (Oct - Mar)"),
+#         monthname=month.name[month],
+#         flag=0)
 
 
 
@@ -77,7 +97,144 @@ data2 <- mydata %>%
 bering <- unique(data2$NMFSAREA[data2$FMP_AREA_C=="BSAI"])
 ebs514 <- unique(data2$STAT_AREA[data2$NMFSAREA=="514" & data2$maxlat<60.1])
 
-bering <- as.character(c(514,524,508,512,516,509,513,517))
+bering <- as.character(c(514,524,508,512,516,509,513,517,521))
+
+p1 <- data2 %>% 
+  filter(NMFSAREA%in%c(bering) & !is.na(NMFSAREA)) %>% 
+  mutate(NMFSAREA=ifelse(maxlat>60.1 & maxlat<65.6,"NBS",NMFSAREA),
+         season=fct_relevel(season,
+                            "Sept-Nov",
+                            "Dec-Feb",
+                            "Mar-May",
+                            "Jun-Aug"),
+         region=ifelse(m.depth<50,"Inner",
+                       ifelse(m.depth>50 & m.depth<100,"Middle",
+                              ifelse(m.depth>100 & m.depth<200,"Outer")))) %>% 
+  group_by(NMFSAREA,season,newyr) %>% 
+  summarise(meantemp=mean(sst.mean,na.rm=TRUE)) %>% 
+  ungroup %>% 
+  group_by(NMFSAREA,season) %>% 
+  mutate(tempanom=(meantemp-mean(meantemp,na.rm=TRUE))) %>% 
+  #mutate(tempanom=(meantemp-mean(meantemp,na.rm=TRUE))/sd(meantemp,na.rm=TRUE)) %>% 
+  ggplot(aes(x = newyr, y = tempanom, fill=factor(NMFSAREA),width=0.75)) +
+  geom_bar(stat="identity",position="dodge") + 
+  theme_bw() + 
+  scale_fill_viridis(name="NMFS Area",discrete=TRUE) + 
+  geom_hline(yintercept=c(-0.5,0.5),linetype=2) +
+  facet_wrap(~season) + 
+  xlab("Year") + 
+  ylab("Temperature Anomaly (C)") + 
+  theme(legend.position="top",
+        legend.text=element_text(size=13),
+        legend.title=element_text(size=13),
+        axis.text.y = element_text(size=12),
+        axis.text.x = element_text(size=12,angle=45,vjust=0.5),
+        axis.title = element_text(size=13),
+        plot.title = element_text(size=15),
+        strip.text = element_text(size=13),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(size=0.25)) + 
+  scale_x_continuous(breaks = 2002:2019, labels = c("2002","","2004","","2006","","2008","","2010","","2012","","2014","","2016","","2018",""),expand=c(0.01,0.01)) + 
+  guides(fill=guide_legend(ncol=6))
+
+x11();p1
+x11();p2
+p2 <- data2 %>% 
+  filter(NMFSAREA%in%c(bering) & !is.na(NMFSAREA)) %>% 
+  mutate(NMFSAREA=ifelse(maxlat>60.1 & maxlat<65.6,"NBS","EBS"),
+         season=fct_relevel(season,
+                            "Sept-Nov",
+                            "Dec-Feb",
+                            "Mar-May",
+                            "Jun-Aug"),
+         region=ifelse(m.depth<50,"Inner",
+                       ifelse(m.depth>50 & m.depth<100,"Middle",
+                              ifelse(m.depth>100 & m.depth<200,"Outer")))) %>% 
+  group_by(NMFSAREA,season,newyr) %>% 
+  summarise(meantemp=mean(sst.mean,na.rm=TRUE)) %>% 
+  ungroup %>% 
+  group_by(NMFSAREA,season) %>% 
+  mutate(tempanom=(meantemp-mean(meantemp,na.rm=TRUE))) %>% 
+  #mutate(tempanom=(meantemp-mean(meantemp,na.rm=TRUE))/sd(meantemp,na.rm=TRUE)) %>% 
+  ggplot(aes(x = newyr, y = tempanom, fill=factor(NMFSAREA),width=0.75)) +
+  geom_bar(stat="identity",position="dodge") + 
+  theme_bw() + 
+  scale_fill_viridis(name="NMFS Area",discrete=TRUE) + 
+  geom_hline(yintercept=c(-0.5,0.5),linetype=2) +
+  facet_wrap(~season) + 
+  xlab("Year") + 
+  ylab("Temperature Anomaly (C)") + 
+  theme(legend.position="top",
+        legend.text=element_text(size=13),
+        legend.title=element_text(size=13),
+        axis.text.y = element_text(size=12),
+        axis.text.x = element_text(size=12,angle=45,vjust=0.5),
+        axis.title = element_text(size=13),
+        plot.title = element_text(size=15),
+        strip.text = element_text(size=13),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(size=0.25)) + 
+  scale_x_continuous(breaks = 2002:2019, labels = c("2002","","2004","","2006","","2008","","2010","","2012","","2014","","2016","","2018",""),expand=c(0.01,0.01)) + 
+  guides(fill=guide_legend(ncol=6))
+
+
+
+p3 <- data2 %>% 
+  filter(NMFSAREA%in%c(bering) & !is.na(NMFSAREA)) %>% 
+  mutate(NMFSAREA=ifelse(maxlat>60.1 & maxlat<65.6,"NBS","EBS"),
+         season=fct_relevel(season,
+                            "Sept-Nov",
+                            "Dec-Feb",
+                            "Mar-May",
+                            "Jun-Aug"),
+         m.depth=abs(m.depth),
+         region=ifelse(m.depth<50,"Inner",
+                       ifelse(m.depth>=50 & m.depth<100,"Middle",
+                              ifelse(m.depth>100 & m.depth<200,"Outer",NA))),
+         mynew=paste0(NMFSAREA,"_",region)) %>% 
+  filter(m.depth<200) %>% 
+  group_by(mynew,season,newyr) %>% 
+  summarise(meantemp=mean(sst.mean,na.rm=TRUE)) %>% 
+  ungroup %>% 
+  group_by(mynew,season) %>% 
+  mutate(tempanom=(meantemp-mean(meantemp,na.rm=TRUE))) %>% 
+  #mutate(tempanom=(meantemp-mean(meantemp,na.rm=TRUE))/sd(meantemp,na.rm=TRUE)) %>% 
+  ggplot(aes(x = newyr, y = tempanom, fill=factor(mynew),width=0.75)) +
+  geom_bar(stat="identity",position="dodge") + 
+  theme_bw() + 
+  scale_fill_viridis(name="Area",discrete=TRUE) + 
+  geom_hline(yintercept=c(-0.5,0.5),linetype=2) +
+  facet_wrap(~season) + 
+  xlab("Year") + 
+  ylab("Temperature Anomaly (C)") + 
+  theme(legend.position="top",
+        legend.text=element_text(size=13),
+        legend.title=element_text(size=13),
+        axis.text.y = element_text(size=12),
+        axis.text.x = element_text(size=12,angle=45,vjust=0.5),
+        axis.title = element_text(size=13),
+        plot.title = element_text(size=15),
+        strip.text = element_text(size=13),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(size=0.25)) + 
+  scale_x_continuous(breaks = 2002:2019, labels = c("2002","","2004","","2006","","2008","","2010","","2012","","2014","","2016","","2018",""),expand=c(0.01,0.01)) + 
+  guides(fill=guide_legend(ncol=6))
+
+pdf("Figures/SST_EBS_2019_EBS.pdf",width=7.5,height=6)
+p2
+dev.off()
+
+pdf("Figures/SST_EBS_2019_domains.pdf",width=7.5,height=6)
+p3
+dev.off()
+
+pdf("Figures/SST_EBS_2019.pdf",width=7.5,height=6)
+p1
+dev.off()
+
+png("Figures/SST_EBS_2019.png",width=7.5,height=6,units="in",res=300)
+p1
+dev.off()
 
 #  The flag field allows us to easily filter out winter 2003 which is incomplete and 
 #  summer 2018 which is incomplete
@@ -107,7 +264,8 @@ p1 <- data2 %>%
             axis.title = element_text(size=14),
             plot.title = element_text(size=16),
             strip.text = element_text(size=14),
-            panel.grid.minor = element_blank()) + 
+            panel.grid.minor = element_blank(),
+            panel.grid.major = element_line(size=0.25)) + 
       scale_x_continuous(breaks = 2002:2018, labels = c("2002","","2004","","2006","","2008","","2010","","2012","","2014","","2016","","2018")) + 
       guides(fill=guide_legend(ncol=6))
 
@@ -138,7 +296,8 @@ p2 <- data2 %>%
         axis.text.x = element_text(size=13,angle=45,vjust=0.5),
         axis.title = element_text(size=14),
         plot.title = element_text(size=16),
-        panel.grid.minor = element_blank()) + 
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(size=0.25)) + 
   scale_x_continuous(breaks = 2002:2018, labels = c("2002","","2004","","2006","","2008","","2010","","2012","","2014","","2016","","2018")) 
 
 p2
@@ -157,7 +316,7 @@ p3 <- data2 %>%
                         (NMFSAREA==640 & as.numeric(STAT_AREA)>445500),"WGOA",
                       ifelse(NMFSAREA==650 | 
                                (NMFSAREA==640 & STAT_AREA<445600),"EGOA",
-                             ifelse(NMFSAREA==659,"SEAK",NA))),
+                             ifelse(NMFSAREA==659,"SEAK Inside",NA))),
          mygoa=fct_relevel(mygoa,"WGOA","EGOA","SEAK"),
          season=fct_relevel(season,"Winter (Oct - Mar)")) %>% 
   filter(!is.na(mygoa) & flag==0) %>% 
@@ -199,7 +358,7 @@ dev.off()
 
 #  Save the Aleutian data query for Ivonne Ortiz
 p4 <- data2 %>% 
-  mutate(myai=ifelse((NMFSAREA==610 & as.numeric(STAT_AREA)>635000) | NMFSAREA%in%c(518,519),"EAI",
+  mutate(myai=ifelse((NMFSAREA==610 & as.numeric(STAT_AREA)>= 645000) | NMFSAREA%in%c(518,519),"EAI",
                      ifelse(NMFSAREA%in%c(543),"WAI",
                             ifelse(NMFSAREA%in%c(541,542),"CAI",NA)))) %>% 
   filter(!is.na(myai) & flag==0) %>% 
