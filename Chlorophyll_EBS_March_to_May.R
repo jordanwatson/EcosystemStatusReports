@@ -272,7 +272,8 @@ for(i in 1:nrow(mydate)){
     mutate(lon=round(lon,2),
            lat=round(lat,2)) %>% 
     inner_join(statlkpVIIRS) %>% 
-    mutate(date=mydate$mydate[i])
+    mutate(date=mydate$mydate[i]) %>% 
+    filter(!is.na(chl))
   
   nbsdat <- nbsdat %>% 
     bind_rows(tempneg)
