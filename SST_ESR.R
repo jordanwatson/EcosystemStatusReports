@@ -13,6 +13,14 @@ library(gridExtra)
 #  Spring (bottom left) Mar to May
 #  Summer (bottom right) Jun to August
 
+#  First load the existing data and see what the last date in the dataset is.
+mydata <- readRDS("Data/temperature_data.RDS") %>% 
+  left_join(readRDS("Data/date_data.RDS")) %>% 
+  left_join(readRDS("Data/spatial_data.RDS")) %>% 
+  data.frame 
+
+max(mydata$date)
+
 #-------------------------------------------------------------------------------------------------------------
 #  Updating the data
 library(DBI)
@@ -20,11 +28,12 @@ library(odbc)
 
 #-------------------------------------------------------------------------------------------------------------
 
-# To update the data with more recent dates use the following query
+# To update the data with more recent dates use the following query. Change the timestamp condition in the SQL
+#  based on the value of max(mydata$date) above.
 con <- dbConnect(odbc::odbc(), "akfin", UID="jwatson", PWD= rstudioapi::askForPassword("Enter AKFIN Password"))
-my_tbl <- dbSendQuery(con,"SELECT * FROM afsc.erddap_sst_stat_area where read_date> timestamp '2019-03-02 09:00:00';")
+my_tbl <- dbSendQuery(con,"SELECT * FROM afsc.erddap_sst_stat_area where read_date> timestamp '2019-06-20 09:00:00';")
 data <- dbFetch(my_tbl)
-saveRDS(data,file="Data/akfin_query_since_03022019.rds")
+#saveRDS(data,file="Data/akfin_query_since_03022019.rds")
 dbDisconnect(con)
 
 #  Make the data conform with the current data (which go through May 10, 2018)
@@ -47,13 +56,10 @@ new_date <- newdata %>%
 #saveRDS(bind_rows(readRDS("Data/date_data.RDS"),new_date) %>% distinct(),file="Data/date_data.RDS")
 #-------------------------------------------------------------------------------------------------------------
 
-
 mydata <- readRDS("Data/temperature_data.RDS") %>% 
   left_join(readRDS("Data/date_data.RDS")) %>% 
   left_join(readRDS("Data/spatial_data.RDS")) %>% 
   data.frame 
-
-
 
 #  If you need to omit certain months due to incompleteness, modify the ifelse in "flag"
 #data2 <- mydata %>% 
@@ -128,7 +134,7 @@ p1 <- data2 %>%
         legend.text=element_text(size=13),
         legend.title=element_text(size=13),
         axis.text.y = element_text(size=12),
-        axis.text.x = element_text(size=12,angle=45,vjust=0.5),
+        #axis.text.x = element_text(size=12,angle=45,vjust=0.5),
         axis.title = element_text(size=13),
         plot.title = element_text(size=15),
         strip.text = element_text(size=13),
@@ -139,9 +145,10 @@ p1 <- data2 %>%
 
 x11();p1
 x11();p2
+
 p2 <- data2 %>% 
   filter(NMFSAREA%in%c(bering) & !is.na(NMFSAREA)) %>% 
-  mutate(NMFSAREA=ifelse(maxlat>60.1 & maxlat<65.6,"NBS","EBS"),
+  mutate(NMFSAREA=ifelse(maxlat>60.1 & maxlat<65.6," NBS "," EBS "),
          season=fct_relevel(season,
                             "Sept-Nov",
                             "Dec-Feb",
@@ -164,18 +171,20 @@ p2 <- data2 %>%
   facet_wrap(~season) + 
   xlab("Year") + 
   ylab("Temperature Anomaly (C)") + 
-  theme(legend.position="top",
+  theme(legend.position=c(0.15,0.95),
+        legend.title=element_blank(),
         legend.text=element_text(size=13),
-        legend.title=element_text(size=13),
-        axis.text.y = element_text(size=12),
-        axis.text.x = element_text(size=12,angle=45,vjust=0.5),
+        legend.background = element_blank(),
+        #legend.title=element_text(size=13),
+        axis.text.y = element_text(size=11),
+        axis.text.x = element_text(size=11),
         axis.title = element_text(size=13),
         plot.title = element_text(size=15),
         strip.text = element_text(size=13),
         panel.grid.minor = element_blank(),
         panel.grid.major = element_line(size=0.25)) + 
-  scale_x_continuous(breaks = 2002:2019, labels = c("2002","","2004","","2006","","2008","","2010","","2012","","2014","","2016","","2018",""),expand=c(0.01,0.01)) + 
-  guides(fill=guide_legend(ncol=6))
+  scale_x_continuous(breaks = 2003:2019, labels = c("2003","","","2006","","","2009","","","2012","","","2015","","","2018",""),expand=c(0.01,0.01)) + 
+  guides(fill=guide_legend(ncol=2))
 
 
 
@@ -217,7 +226,8 @@ p3 <- data2 %>%
         strip.text = element_text(size=13),
         panel.grid.minor = element_blank(),
         panel.grid.major = element_line(size=0.25)) + 
-  scale_x_continuous(breaks = 2002:2019, labels = c("2002","","2004","","2006","","2008","","2010","","2012","","2014","","2016","","2018",""),expand=c(0.01,0.01)) + 
+  scale_x_continuous(breaks = 2003:2019, labels = c("2003","","","2006","","","2009","","","2012","","","2015","","","2018",""),expand=c(0.01,0.01)) + 
+  #scale_x_continuous(breaks = 2002:2019, labels = c("2002","","2004","","2006","","2008","","2010","","2012","","2014","","2016","","2018",""),expand=c(0.01,0.01)) + 
   guides(fill=guide_legend(ncol=6))
 
 pdf("Figures/SST_EBS_2019_EBS.pdf",width=7.5,height=6)
