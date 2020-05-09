@@ -1,0 +1,186 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(DBI)
+library(odbc)
+library(cowplot)
+library(magick)
+```
+
+```{r read_in_data}
+con <- dbConnect(odbc::odbc(), "akfin", 
+                 UID=rstudioapi::askForPassword("Enter AKFIN Username"), 
+                 PWD= rstudioapi::askForPassword("Enter AKFIN Password"))
+
+data <- dbFetch(dbSendQuery(con,"select tt.*,
+    extract(YEAR FROM tt.read_date) as year,
+    to_char(tt.read_date,'DDD') as julian
+    from(
+    select round(avg(t.temp),2) as meansst,
+                 t.esr_region,
+                 t.read_date
+    from(select a.read_date,
+           a.temp,
+           b.esr_region
+        from AFSC.erddap_sst_stat_area a
+        join (select b.stat_area,
+           b.nmfsarea,
+            (case 
+            when b.nmfsarea IN ('514','524','508','512','516','509','513','517','521') and b.max_lat>60.1 and b.max_lat < 65.6 then 'NBS' 
+            when b.nmfsarea IN ('514','524','508','512','516','509','513','517','521') and b.max_lat<=60.1 then 'EBS'
+            when b.nmfsarea IN ('659') then 'SEAK Inside'
+            when b.nmfsarea='650' or (b.nmfsarea='640' and b.stat_area<445600) then 'EGOA'
+            when (b.nmfsarea IN ('620','630','649')) 
+                or (b.nmfsarea='610' and b.stat_area<635000) 
+                or (b.nmfsarea='640' and b.stat_area>445500) then 'WGOA'
+            else 'Other' end) esr_region from AFSC.erddap_stat_area_supplemental b) b
+        on a.stat_area=b.stat_area) t
+    group by t.esr_region,t.read_date
+    order by t.read_date,t.esr_region
+    ) tt")) %>% 
+  rename_all(tolower) %>% 
+  mutate(julian=as.numeric(julian),
+         esr_region2=case_when(
+           esr_region=="EBS" ~ "Eastern Bering Sea",
+           esr_region=="NBS" ~ "aNorthern Bering Sea",
+           esr_region=="EGOA" ~ "Eastern Gulf of Alaska",
+           esr_region=="WGOA" ~ "Western Gulf of Alaska",
+           esr_region=="CGOA" ~ "Central Gulf of Alaska")) %>% 
+  mutate(month=month(read_date),
+         day=day(read_date),
+         newdate=as.Date(ifelse(month==12,as.character(as.Date(paste("1999",month,day,sep="-"),format="%Y-%m-%d")),
+                                  as.character(as.Date(paste("2000",month,day,sep="-"),format="%Y-%m-%d"))),format("%Y-%m-%d")),
+         year2=ifelse(month==12,year+1,year))
+```
+
+
+```{r set_aesthetics}
+OceansBlue1='#0093D0'
+CoralRed1='#FF4438'
+SeagrassGreen1='#93D500'
+UrchinPurple1='#7F7FFF'
+WavesTeal1='#1ECAD3'
+
+current.year.color <- OceansBlue1
+last.year.color <- WavesTeal1
+mean.color <- "black"
+
+theme_set(theme_cowplot())
+```
+
+
+```{r define time periods}
+current.year <- max(data$year)
+last.year <- current.year-1
+mean.years <- 2003:2012
+mean.lab <- "Mean 2003-2012"
+```
+
+
+
+```{r}
+mylines_base <- ggplot() +
+  geom_line(data=data %>% filter(year2<last.year & esr_region%in%(c("NBS","EBS"))),
+            aes(newdate,meansst,group=factor(year2),col='mygrey')) +
+  geom_line(data=data %>% filter(year2==last.year & esr_region%in%(c("NBS","EBS"))),
+            aes(newdate,meansst,color='last.year.color'),size=1.15) +
+  geom_line(data=data %>% 
+              filter(year%in%mean.years & esr_region%in%(c("NBS","EBS"))) %>% 
+              group_by(esr_region2,newdate) %>% 
+              summarise(meantemp=mean(meansst,na.rm=TRUE)),
+            aes(newdate,meantemp,col='mean.color'),size=1) +
+  geom_line(data=data %>% filter(year2==current.year & esr_region%in%(c("NBS","EBS"))),
+            aes(newdate,meansst,color='current.year.color'),size=1.15) +
+  facet_wrap(~esr_region2,ncol=2) + 
+  scale_color_manual(name="",
+                     breaks=c('current.year.color','last.year.color','mygrey','mean.color'),
+                     values=c('current.year.color'=current.year.color,'last.year.color'=last.year.color,'mygrey'='grey70','mean.color'=mean.color),
+                     labels=c(current.year,last.year,paste0('2002-',last.year-1),mean.lab)) +
+  ylab("Mean Sea Surface Temperature (C)") + 
+  xlab("") +
+  scale_x_date(date_breaks="1 month",
+             date_labels = "%b",
+             expand = c(0.025,0.025)) 
+
+
+mylines_basic <- mylines_base + 
+    theme(legend.position=c(0.475,0.875),
+        legend.text = element_text(size=10),
+        axis.text.x=element_text(color=c("black",NA,NA,"black",NA,NA,"black",NA,NA,"black",NA,NA,NA)))
+  
+png("Z:/SST_esr_update_lines.png",width=6,height=5,units="in",res=200)
+ggdraw(mylines_basic) +
+  draw_image("fisheries_header_logo_jul2019.png",scale=0.2,x=0.06,y=0.35,hjust=0.35) +
+  annotate("text",x=0.175,y=0.045,label="Contact: Jordan.Watson@noaa.gov (data: JPL MUR SST)",hjust=0.1,size=3.25)
+dev.off()
+#-----------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------
+```
+
+
+```{r ribbon_version}
+
+myribbon_base <- ggplot() +
+  geom_ribbon(data=data %>% 
+                filter(year2<last.year & esr_region%in%(c("NBS","EBS"))) %>% 
+                group_by(esr_region2,newdate) %>% 
+                summarise(mymin=min(meansst,na.rm=TRUE),
+                          mymax=max(meansst,na.rm=TRUE)),
+              aes(newdate,ymin=mymin,ymax=mymax),color='grey70',alpha=0.25) +
+  geom_line(data=data %>% filter(year2==last.year & esr_region%in%(c("NBS","EBS"))),
+            aes(newdate,meansst,color='mygrey'),size=1.15) + # This is just a dummy layer to get gray in the legend
+  geom_line(data=data %>% filter(year2==last.year & esr_region%in%(c("NBS","EBS"))),
+            aes(newdate,meansst,color='last.year.color'),size=1.15) +
+  geom_line(data=data %>% 
+              filter(year%in%mean.years & esr_region%in%(c("NBS","EBS"))) %>% 
+              group_by(esr_region2,newdate) %>% 
+              summarise(meantemp=mean(meansst)),
+            aes(newdate,meantemp,col='mean.color'),size=1) +
+  geom_line(data=data %>% filter(year==current.year & esr_region%in%(c("NBS","EBS"))),
+            aes(newdate,meansst,color='current.year.color'),size=1.15) +
+  facet_wrap(~esr_region2) + 
+  scale_color_manual(name="",
+                     breaks=c('current.year.color',
+                              'last.year.color',
+                              'mygrey',
+                              'mean.color'),
+                     values=c('current.year.color'=current.year.color,
+                              'last.year.color'=last.year.color,
+                              'mygrey'='grey70',
+                              'mean.color'=mean.color),
+                     labels=c(current.year,last.year,paste0('Range 2002-',last.year-1),mean.lab)) +
+  ylab("Mean Sea Surface Temperature (C)") + 
+  xlab("") +
+  scale_x_date(date_breaks="1 month",
+             date_labels = "%b",
+             expand = c(0.025,0.025))
+
+myribbon_basic <- myribbon_base +
+  theme(legend.position=c(0.475,0.875),
+        legend.text = element_text(size=10),
+        panel.border=element_rect(colour="black",size=1),
+        axis.text.x=element_text(color=c("black",NA,NA,"black",NA,NA,"black",NA,NA,"black",NA,NA,NA))) 
+
+png("Z:/SST_esr_update_ribbon.png",width=6,height=5,units="in",res=200)
+ggdraw(myribbon_basic) +
+  draw_image("fisheries_header_logo_jul2019.png",scale=0.2,x=0.06,y=0.35,hjust=0.35) +
+  annotate("text",x=0.175,y=0.045,label="Contact: Jordan.Watson@noaa.gov (data: JPL MUR SST)",hjust=0.1,size=3.25)
+dev.off()
+
+# Next one add grid lines.
+png("Z:/SST_esr_update_ribbon.png",width=6,height=5,units="in",res=200)
+ggdraw(myribbon_basic) +
+  draw_image("fisheries_header_logo_jul2019.png",scale=0.2,x=0.06,y=0.35,hjust=0.35) +
+  annotate("text",x=0.175,y=0.045,label="Contact: Jordan.Watson@noaa.gov (data: JPL MUR SST)",hjust=0.1,size=3.25)
+dev.off()
+
+
+```
+
