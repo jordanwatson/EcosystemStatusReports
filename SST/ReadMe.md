@@ -141,7 +141,7 @@ data %>%
         panel.grid = element_blank()) + 
   scale_colour_viridis(discrete=TRUE)
 ```
-
+![statefed image](images/statefed.png)
 
 There are too many ADFG stat area to plot each one a different color but for illustration purposes the boundaries are still easy to see in the following map.    
 
@@ -159,6 +159,7 @@ data %>%
         panel.grid = element_blank()) + 
   scale_color_viridis(discrete="TRUE")
 ```
+![statarea image](images/adfg_stat.png)
 
 The next map shows bathymetry using the depths for each point (not really a spatial stratum but useful nonetheless).   
 
@@ -175,6 +176,7 @@ data %>%
         panel.grid = element_blank()) + 
   scale_color_viridis()
 ```
+![depth image](images/depth.png)
 
 Now for the NMFS areas.    
 
@@ -191,6 +193,7 @@ data %>%
         panel.grid = element_blank()) + 
   scale_color_viridis(discrete="TRUE")
 ```
+![nmfs image](images/nmfsareas.png)
 
 And the BSIERP areas.    
 
@@ -207,6 +210,8 @@ data %>%
         panel.grid = element_blank()) + 
   scale_color_viridis(discrete=TRUE)
 ```
+![bsierp image](images/bsierp.png)
+
 
 And finally, the Ecosystem Status Report areas.     
 
@@ -224,6 +229,7 @@ data %>%
         panel.grid = element_blank()) + 
   scale_color_viridis(discrete=TRUE)
 ```
+![esrs image](images/esrs.png)
 
 Finally, returning to the longer time series, within each area, I average temperatures for a particular day and spatial stratum. For the Ecosystem Status Reports, there are 7 spatial strata total, so we would have 7 values per day (one for each area). I demonstrate below for a single date.    
 
