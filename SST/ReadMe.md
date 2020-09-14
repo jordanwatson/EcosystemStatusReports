@@ -94,7 +94,7 @@ data %>%
   ggplot() + 
   geom_point(aes(longitude,latitude))
 ```
-![grid image](/images/crw_grid.png)
+![grid image](SST/images/crw_grid.png)
 
 We need to match these data to each of the different spatial regions of interest (e.g., Ecosystem Status Report, NMFS area, ADFG area, BSIERP area, etc.). I have created a spatial look-up table that matches points from the Coral Reef Watch latitude-longitude grid with each of the different spatial strata. Below we'll do an inner_join to get rid of points that fall outside of our area of interest. In the lookup table, note the **id** column. This is used for storing the spatial information for the full SST time series so that I can subsequently match my full SST dataset with this lookup table without having to store the large latitude and longitude fields. So I will not use it in my example, but it is critical for the operational usage of this dataset.
 
