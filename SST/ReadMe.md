@@ -23,7 +23,7 @@ The full time series dataset for Alaska is quite large but is currently availabl
 
 The below example will illustrate the process that was undertaken for the full temporal extent of the CRW (Coral Reef Watch) SST dataset. I will illustrate for a single day but will also describe how to extend the process for the full temporal extent. 
 
-The CRW dataset is available through multiple different ERDDAPs (I typically use the Coastwatch West Coast node because I have friends there that help me). The CRW dataset is currently only available (as far as I know) with longitudes -180 to 180 (as opposed to 0 to 360) so we pull the data in two separate chunks, a positive and negative longitude pull. I am only downloading the CRW_SST column but there are other columns that may be of interest to others (e.g., sst anomaly and sea ice). For more information, visit the Coastwatch site (**https://coastwatch.pfeg.noaa.gov/erddap/griddap/NOAA_DHW.html**) or the Coral Reef Watch site (**https://coralreefwatch.noaa.gov/**).
+The CRW dataset is available through multiple different ERDDAPs (I typically use the Coastwatch West Coast node). The CRW dataset is currently only available (as far as I know) with longitudes -180 to 180 (as opposed to 0 to 360) so we pull the data in two separate chunks, a positive and negative longitude pull. I am only downloading the CRW_SST column but there are other columns that may be of interest to others (e.g., sst anomaly and sea ice). For more information, visit the Coastwatch site (**https://coastwatch.pfeg.noaa.gov/erddap/griddap/NOAA_DHW.html**) or the Coral Reef Watch site (**https://coralreefwatch.noaa.gov/**).
 
 I am working on a combination of a lousy loaner laptop and a virtual machine that has a really small hard drive so I have had to partition these not-all-that-large datasets both temporally and spatially. I download each year into two separate files for both the negative and the positive longitudes, leading to four netCDF files for each year. Because of persistent computer problems, I implement the following code as a loop instead of using an apply or other cleaner coding solution. Thus, when the computer crashes, I at least don't loose my progress to date.    
 
@@ -96,15 +96,15 @@ data %>%
 
 We need to match these data to each of the different spatial regions of interest (e.g., Ecosystem Status Report, NMFS area, ADFG area, BSIERP area, etc.). I have created a spatial look-up table that matches points from the Coral Reef Watch latitude-longitude grid with each of the different spatial strata. Below we'll do an inner_join to get rid of points that fall outside of our area of interest. In the lookup table, note the **id** column. This is used for storing the spatial information for the full SST time series so that I can subsequently match my full SST dataset with this lookup table without having to store the large latitude and longitude fields. So I will not use it in my example, but it is critical for the operational usage of this dataset.
 
-The spatial strata include:
-**statefed:** Jurisdictional boundaries. Does a point fall in state, federal, or international waters?
-**stat_area:** ADF&G groundfish statistical area (also called stat6 area; https://soa-adfg.opendata.arcgis.com/datasets/commercial-fisheries-groundfish-registration-areas)
-**depth:** Approximate depth at each point as discerned using the marmap R package and the GEBCO bathymetry dataset
-**nmfsarea:** NMFS management area (https://www.fisheries.noaa.gov/webdam/download/89908630)
-**bsierp_name:** Name of each of the 16 bsierp regions (https://access.afsc.noaa.gov/pubs/posters/pdfs/pOrtiz04_marine-regions-bs.pdf)
-**bsierp_id:** The bsierp_name fields can be a tad onerous to type out so this is a numeric id instead.
-**Ecosystem:** Three primary regions for Ecosystem Status Reports (Bering Sea, Gulf of Alaska, and Aleutian Islands)
-**Ecosystem_sub:** Subregions within each ESR region (Southeastern and Northern Bering Sea; Eastern, Central, and Western Aleutians; Eastern and Western Gulf of Alaska)
+The spatial strata include:   
+**statefed:** Jurisdictional boundaries. Does a point fall in state, federal, or international waters?   
+**stat_area:** ADF&G groundfish statistical area (also called stat6 area       https://soa-adfg.opendata.arcgis.com/datasets/commercial-fisheries-groundfish-registration-areas)   
+**depth:** Approximate depth at each point as discerned using the marmap R package and the GEBCO bathymetry dataset    
+**nmfsarea:** NMFS management area (https://www.fisheries.noaa.gov/webdam/download/89908630)   
+**bsierp_name:** Name of each of the 16 bsierp regions (https://access.afsc.noaa.gov/pubs/posters/pdfs/pOrtiz04_marine-regions-bs.pdf)   
+**bsierp_id:** The bsierp_name fields can be a tad onerous to type out so this is a numeric id instead   
+**Ecosystem:** Three primary regions for Ecosystem Status Reports (Bering Sea, Gulf of Alaska, and Aleutian Islands)    
+**Ecosystem_sub:** Subregions within each ESR region (Southeastern and Northern Bering Sea; Eastern, Central, and Western Aleutians; Eastern and Western Gulf of Alaska)     
 
 Many rows may have NA values for some strata (e.g., bsierp_id mostly have NAs because the majority of the rows are not Bering Sea records. Below is an example of several rows where there are no NA values.     
 
