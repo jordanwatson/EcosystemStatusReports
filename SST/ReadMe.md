@@ -76,14 +76,12 @@ download.file(url = paste0("https://coastwatch.pfeg.noaa.gov/erddap/griddap/NOAA
 
 The above should have downloaded two different netCDF files. There are multiple ways to access netCDF files in R. The majority are a real pain. The **tidync** package makes it much easier though. In the following steps I will read in the negative and positive longitude files, convert them to tibbles (fancy data frame), convert the date into something more practical. This will give us a gridded dataset with just over 600,000 temperature records per day.    
 
-```{r}
+```{r,eval=FALSE}
 data <- tidync("crw_sst_negative_longitudes_06012020.nc") %>% 
   hyper_tibble() %>% 
   bind_rows(tidync("crw_sst_positive_longitudes_06012020.nc") %>% 
   hyper_tibble()) %>% 
   mutate(date=as_datetime(time))
-
-head(data)
 ```
 
 There are still way more data here than we need because we downloaded data across rectangular grids.     
@@ -127,8 +125,7 @@ data %<>%
 
 Below will show maps for each of the different spatial strata in the dataset.    
 
-
-```{r}
+```{r,eval=FALSE}
 data %>% 
   mutate(longitude=ifelse(longitude<0,longitude+360,longitude)) %>% 
   filter(!is.na(statefed)) %>% 
@@ -145,8 +142,7 @@ data %>%
 
 There are too many ADFG stat area to plot each one a different color but for illustration purposes the boundaries are still easy to see in the following map.    
 
-
-```{r}
+```{r,eval=FALSE}
 data %>% 
   mutate(longitude=ifelse(longitude<0,longitude+360,longitude)) %>% 
   filter(!is.na(stat_area)) %>% 
@@ -163,7 +159,7 @@ data %>%
 
 The next map shows bathymetry using the depths for each point (not really a spatial stratum but useful nonetheless).   
 
-```{r}
+```{r,eval=FALSE}
 data %>% 
   mutate(longitude=ifelse(longitude<0,longitude+360,longitude)) %>% 
   filter(!is.na(depth)) %>% 
@@ -180,7 +176,7 @@ data %>%
 
 Now for the NMFS areas.    
 
-```{r}
+```{r,eval=FALSE}
 data %>% 
   mutate(longitude=ifelse(longitude<0,longitude+360,longitude)) %>% 
   filter(!is.na(nmfsarea)) %>% 
@@ -197,7 +193,7 @@ data %>%
 
 And the BSIERP areas.    
 
-```{r}
+```{r,eval=FALSE}
 data %>% 
   mutate(longitude=ifelse(longitude<0,longitude+360,longitude)) %>% 
   filter(!is.na(bsierp_name)) %>% 
@@ -215,7 +211,7 @@ data %>%
 
 And finally, the Ecosystem Status Report areas.     
 
-```{r}
+```{r,eval=FALSE}
 data %>% 
   mutate(longitude=ifelse(longitude<0,longitude+360,longitude)) %>% 
   filter(!is.na(Ecosystem_sub)) %>% 
@@ -238,7 +234,6 @@ data %>%
   filter(!is.na(Ecosystem_sub)) %>% 
   mutate(date=as_date(date)) %>% 
   group_by(date,Ecosystem_sub) %>% 
-  summarise(meansst=round(mean(CRW_SST,na.rm=TRUE),2)) %>% 
-  kable()
+  summarise(meansst=round(mean(CRW_SST,na.rm=TRUE),2)) 
 ```
 
