@@ -82,14 +82,14 @@ myplotfun <- function(region1,region2,region3){
     geom_line(data=data %>% filter(year2<last.year & esr_region%in%(c(region1,region2,region3))),
               aes(newdate,meansst,group=factor(year2),col='mygrey'),size=0.3) +
     geom_line(data=data %>% filter(year2==last.year & esr_region%in%(c(region1,region2,region3))),
-              aes(newdate,meansst,color='last.year.color'),size=0.75) +
+              aes(newdate,meansst,color='last.year.color'),size=0.65) +
     geom_line(data=data %>% 
                 filter(year%in%mean.years & esr_region%in%(c(region1,region2,region3))) %>% 
                 group_by(esr_region,newdate) %>% 
                 summarise(meantemp=mean(meansst,na.rm=TRUE)),
               aes(newdate,meantemp,col='mean.color'),size=0.5) +
     geom_line(data=data %>% filter(year2==current.year & esr_region%in%(c(region1,region2,region3))),
-              aes(newdate,meansst,color='current.year.color'),size=0.95) +
+              aes(newdate,meansst,color='current.year.color'),size=0.65) +
     facet_wrap(~esr_region,ncol=3) + 
     scale_color_manual(name="",
                        breaks=c('current.year.color','last.year.color','mygrey','mean.color'),
