@@ -1,0 +1,390 @@
+---
+title: "SST Noteworth contribution for the Bering ESR"
+author: "Jordan Watson"
+date: "10/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE,message=F}
+knitr::opts_chunk$set(warning = F,message=F)
+library(tidyverse)
+library(doParallel) 
+library(heatwaveR)
+library(lubridate)
+library(viridis)
+
+#  Load 508 compliant NOAA colors
+OceansBlue1='#0093D0'
+OceansBlue2='#0055A4' # rebecca dark blue
+CoralRed1='#FF4438'
+Crustacean1='#FF8300'
+SeagrassGreen1='#93D500'
+SeagrassGreen4='#D0D0D0' # This is just grey
+UrchinPurple1='#7F7FFF'
+WavesTeal1='#1ECAD3'
+
+mytheme <- theme(strip.text = element_text(size=10,color="white",family="sans",face="bold"),
+      strip.background = element_rect(fill=OceansBlue2),
+      axis.title = element_text(size=10,family="sans",color="black"),
+      axis.text.y = element_text(size=10,family="sans",color="black"),
+      axis.text.x = element_text(size=9,family="sans",color="black",hjust=0.75),
+      panel.border=element_rect(colour="black",fill=NA,size=0.5),
+      panel.background = element_blank(),
+      plot.margin=unit(c(0.65,0,0.65,0),"cm"),
+      legend.position=c(0.6,0.7),
+      legend.background = element_blank(),
+      legend.key.size = unit(1,"line"))
+
+#  Make a function to combine calls to ts2clm() and detect_event()  
+# mhwfun <- function(region){
+#   detect_event(ts2clm(data %>% filter(Ecosystem_sub==region), climatologyPeriod = c("1986-01-01", "2015-12-31")))
+# }
+```
+
+
+```{r, echo=FALSE,message=FALSE}
+newdat <- readRDS("Data/crwsst_bering_19850401_through_2020.RDS") %>% 
+  #filter(Ecosystem_sub=="Southeastern Bering Sea") %>% 
+  mutate(doy=yday(date),
+         year=year(date),
+         month=month(date),
+         day=day(date),
+         newdate=as.Date(ifelse(month>=9,as.character(as.Date(paste("1999",month,day,sep="-"),format="%Y-%m-%d")),
+                                as.character(as.Date(paste("2000",month,day,sep="-"),format="%Y-%m-%d"))),format("%Y-%m-%d")),
+         year2=ifelse(month>=9,year+1,year)) %>% 
+  arrange(date) 
+```
+
+Cumulative annual SST distributions (Sept-August) for each year since 1985 . Teal is 2019. Orange is 2020 (through the end of August).
+
+```{r, echo=FALSE,message=FALSE}
+tempdat <- newdat %>% 
+  filter(year2>1985 & year2<2021) %>% 
+  group_by(year2,Ecosystem_sub) %>% 
+  arrange(newdate) %>% 
+  mutate(cumheat=cumsum(meansst)) 
+
+png("SST_ESR/2020/EBS/Watson_Fig1.png",width=6,height=3.375,units="in",res=300)
+ggplot() + 
+  geom_line(data=tempdat %>% filter(year2<2019),aes(newdate,cumheat,group=year2),linetype=1,color="grey",size=0.35) + 
+  geom_line(data=tempdat %>% filter(year2==2019),aes(newdate,cumheat),color=OceansBlue1,size=0.5) +
+  geom_line(data=tempdat %>% filter(year2==2020),aes(newdate,cumheat),size=0.5,color=Crustacean1) + 
+  facet_wrap(~Ecosystem_sub,scales="free_y") + 
+  mytheme + 
+  scale_x_date(date_breaks="1 month",date_labels = "%b",expand = c(0.025,0.025)) + 
+  theme(axis.text.x=element_text(color=c("black",NA,NA,"black",NA,NA,"black",NA,NA,"black",NA,NA,NA)),
+        axis.title.x=element_blank(),
+        plot.margin=unit(c(0.15,0.25,0.05,0),"cm")) + 
+  ylab("Cumulative Sea Surface Temperature (°C)")
+dev.off()
+```
+
+Cumulative SST at the end of each year (sum of daily SST, September through August). The horizontal line is the mean (seasonal years ending in 1986-2015).   
+
+```{r, echo=FALSE,message=F,eval=F}
+mymean <- newdat %>% 
+  filter(year2>1985 & year2<2021) %>% 
+  group_by(year2,Ecosystem_sub) %>% 
+  arrange(newdate) %>% 
+  summarise(cumheat=sum(meansst)) %>% 
+  group_by(Ecosystem_sub) %>% 
+  summarise(meanheat=mean(cumheat[between(year2,1986,2015)]))
+
+newdat %>% 
+  filter(year2>1985 & year2<2021) %>% 
+  group_by(year2,Ecosystem_sub) %>% 
+  arrange(newdate) %>% 
+  summarise(cumheat=sum(meansst)) %>% 
+  ggplot(aes(year2,cumheat)) + 
+  geom_bar(stat="identity",fill=OceansBlue2) + 
+  geom_hline(data=mymean,aes(yintercept=meanheat),linetype=2) +
+  facet_wrap(~Ecosystem_sub) + 
+  mytheme + 
+  scale_x_continuous(expand=c(0.01,0.75)) + 
+  xlab("") + 
+  ylab("Total Annual Cumulative Sea Surface Temperature (°C)") +
+  theme(plot.margin=unit(c(0.15,0.25,0.05,0),"cm"))
+```
+
+Good catch - I had accidentally done the anomalies up through 2020. Pretty well illustrates the importance of your baseline period!
+
+```{r, echo=FALSE,message=F}
+mymean <- newdat %>% 
+  filter(!year2%in%c(1985,2021)) %>% 
+  group_by(year2,Ecosystem_sub) %>% 
+  arrange(newdate) %>% 
+  summarise(cumheat=sum(meansst)) %>% 
+  group_by(Ecosystem_sub) %>% 
+  mutate(meanheat=mean(cumheat[between(year2,1986,2015)]),
+         sdheat=sd(cumheat[between(year2,1986,2015)]),
+         anomaly=cumheat-meanheat)
+
+png("SST_ESR/2020/EBS/Watson_Fig2.png",width=6,height=3.375,units="in",res=300)
+mymean %>% 
+  ggplot(aes(year2,anomaly)) +
+    geom_bar(stat="identity",fill=OceansBlue2) + 
+  geom_hline(aes(yintercept=0),linetype=2) +
+  geom_hline(aes(yintercept=sdheat),linetype=2) +
+  geom_hline(aes(yintercept=-sdheat),linetype=2) +
+  facet_wrap(~Ecosystem_sub) + 
+  mytheme + 
+  scale_x_continuous(expand=c(0.01,0.75)) + 
+  xlab("") + 
+  ylab("Cumulative Annual SST Anomaly (°C)") +
+  theme(plot.margin=unit(c(0.15,0.25,0.05,0),"cm"))
+dev.off()
+```
+
+Yeah, I'm with ya. I'm not sure about this one. I tried reordering the seasons and I think it's a little better. But I can't quite understand how R orders the negative / positive values differently. This seems to be almost redundant with the flamingoes, so I'm not full convinced that it's worth keeping in. Maybe it's easier to have the monochrome bar chart to show cumulative SST and then the flamingoes to show how that has changed throughout the year?   
+
+The mean line does look wonky in the NBS because of those negative values. Tough to wrap my head around because we aren't used to seeing stacked bar charts that include negative values. If you subtract the negative values from the positive values, the height of the bar will end up lower (I just had to check this). So *if* we decide to go with this plot, I think we omit the mean lines. 
+
+```{r, echo=FALSE,message=F}
+# mymean <- newdat %>% 
+#   filter(year2>1985 & year2<2021) %>% 
+#   group_by(year2,Ecosystem_sub) %>% 
+#   arrange(newdate) %>% 
+#   summarise(cumheat=sum(meansst)) %>% 
+#   group_by(Ecosystem_sub) %>% 
+#   summarise(meanheat=mean(cumheat[between(year2,1986,2015)]))
+
+# newdat %>% 
+#   filter(year2>1985 & year2<2021) %>% 
+#     mutate(Season=case_when(
+#       month%in%c(9,10,11)~"Fall",
+#       month%in%c(12,1,2)~"Winter",
+#       month%in%c(3,4,5)~"Spring",
+#       month%in%c(6,7,8)~"Summer")) %>% 
+#   data.frame %>% 
+#   mutate(Season=factor(Season),
+#           Season=fct_relevel(Season,"Fall","Winter","Spring","Summer")) %>% 
+#   group_by(year2,Ecosystem_sub,Season) %>% 
+#   summarise(cumheat=sum(meansst)) %>% 
+#   data.frame %>% 
+#   ggplot(aes(year2,cumheat,fill=Season)) + 
+#   geom_bar(stat="identity") + 
+#   geom_hline(data=mymean,aes(yintercept=meanheat),linetype=2) +
+#     scale_fill_manual(name="",labels=c("Fall","Winter","Spring","Summer"),values=c(OceansBlue2,Crustacean1,UrchinPurple1,WavesTeal1)) +
+#   facet_wrap(~Ecosystem_sub) + 
+#   mytheme + 
+#   scale_x_continuous(expand=c(0.01,0.75)) + 
+#   xlab("") + 
+#   ylab("Total Annual Cumulative Sea Surface Temperature (°C)") +
+#   theme(plot.margin=unit(c(0.15,0.25,0.05,0),"cm"),
+#         legend.position=c(0.1,0.9))
+
+png("SST_ESR/2020/EBS/Watson_Fig3.png",width=6,height=4,units="in",res=300)
+newdat %>% 
+  filter(year2>1985 & year2<2021) %>% 
+    mutate(Season=case_when(
+      month%in%c(9,10,11)~"Fall",
+      month%in%c(12,1,2)~"Winter",
+      month%in%c(3,4,5)~"Spring",
+      month%in%c(6,7,8)~"Summer")) %>% 
+  data.frame %>% 
+  mutate(Season=factor(Season),
+          Season=fct_relevel(Season,"Fall","Winter","Spring","Summer")) %>% 
+  group_by(year2,Ecosystem_sub,Season) %>% 
+  summarise(cumheat=sum(meansst)) %>% 
+  data.frame %>% 
+  mutate(Season=fct_relevel(Season,"Summer","Fall","Winter","Spring")) %>% 
+  ggplot(aes(year2,cumheat,fill=Season)) + 
+  geom_bar(stat="identity") + 
+  #geom_hline(data=mymean,aes(yintercept=meanheat),linetype=2) +
+    scale_fill_manual(name="",labels=c("Summer","Fall","Winter","Spring"),values=c(OceansBlue2,Crustacean1,UrchinPurple1,WavesTeal1)) +
+  facet_wrap(~Ecosystem_sub) + 
+  mytheme + 
+  scale_x_continuous(expand=c(0.01,0.75)) + 
+  xlab("") + 
+  ylab("Total Annual Cumulative Sea Surface Temperature (°C)") +
+  theme(plot.margin=unit(c(0.15,0.25,0.05,0),"cm"),
+        legend.position=c(0.1,0.9))
+dev.off()
+```
+
+The following shows the annual cumulative SST throughout the year. Black lines represent "normal" periods and red lines represent Marine Heatwave periods.     
+
+```{r, echo=FALSE,message=F}
+
+mhw <- (detect_event(ts2clm(readRDS("Data/crwsst_bering_19850401_through_111820.RDS") %>%
+                              filter(Ecosystem_sub=="Northern Bering Sea") %>% 
+                              rename(t=date,temp=meansst) %>% 
+                              arrange(t), climatologyPeriod = c("1985-09-01", "2015-08-31"))))$event %>% 
+  mutate(region="Northern Bering Sea") %>% 
+  bind_rows((detect_event(ts2clm(readRDS("Data/crwsst_bering_19850401_through_111820.RDS") %>%
+                                   filter(Ecosystem_sub=="Southeastern Bering Sea") %>% 
+                                   rename(t=date,temp=meansst) %>% 
+                                   arrange(t), climatologyPeriod = c("1985-09-01", "2015-08-31"))))$event %>% 
+              mutate(region="Southeastern Bering Sea")) %>% 
+  data.frame
+
+tempdat <- newdat %>% 
+  filter(year2>1985 & year2<2021) %>% 
+  group_by(year2,Ecosystem_sub) %>% 
+  arrange(newdate) %>% 
+  mutate(cumheat=cumsum(meansst))
+
+png("SST_ESR/2020/EBS/Watson_Fig4.png",width=7,height=5,units="in",res=300)
+lapply(1:nrow(mhw),function(x)data.frame(date=seq.Date(as.Date(mhw[x,"date_start"]),as.Date(mhw[x,"date_end"]),"days"),
+                                         mhw=1)) %>% 
+  bind_rows() %>% 
+  right_join(tempdat) %>% 
+  mutate(mhw=ifelse(is.na(mhw),0,mhw)) %>% 
+  ggplot(aes(date,cumheat,group=factor(year2),color=factor(mhw))) + 
+  geom_line(size=0.5) + 
+  #geom_hline(yintercept=0,linetype=2,color="gray",alpha=0.75) + 
+  facet_wrap(~Ecosystem_sub,ncol=1,scales="free") + 
+  scale_color_manual(values=c("black","red")) +
+  scale_x_date(date_breaks = "5 year", date_minor_breaks = "1 year",
+             date_labels = "%Y") +
+  mytheme + 
+  theme(legend.position="none") +
+  ylab("Annual Cumulative Sea Surface Temperature (°C)") +
+  xlab("Year")
+dev.off()
+```
+
+MHW plot that includes the last few winters (starts in Sept 2017).
+
+```{r,echo=FALSE,message=F}
+#  Create figure that shows MHW status
+mhw <- (detect_event(ts2clm(readRDS("Data/crwsst_bering_19850401_through_2020.RDS") %>%
+                             filter(Ecosystem_sub=="Southeastern Bering Sea") %>% 
+                             rename(t=date,temp=meansst) %>% 
+                             arrange(t), climatologyPeriod = c("1985-09-01", "2015-08-31"))))$clim %>% 
+  mutate(region="Southeastern Bering Sea") %>% 
+  bind_rows((detect_event(ts2clm(readRDS("Data/crwsst_bering_19850401_through_2020.RDS") %>%
+                                  filter(Ecosystem_sub=="Northern Bering Sea") %>% 
+                                  rename(t=date,temp=meansst) %>% 
+                                  arrange(t), climatologyPeriod = c("1985-09-01", "2015-08-31"))))$clim %>% 
+              mutate(region="Northern Bering Sea"))
+
+
+clim_cat <- mhw %>%
+  #mutate(region=fct_relevel(region,"Western Gulf of Alaska")) %>% 
+  group_by(region) %>% 
+  dplyr::mutate(diff = thresh - seas,
+                thresh_2x = thresh + diff,
+                thresh_3x = thresh_2x + diff,
+                thresh_4x = thresh_3x + diff,
+                year=year(t))
+
+# Set line colours
+lineColCat <- c(
+  "Temperature" = "black",
+  "Climatology" = "gray20",
+  "Moderate" = "gray60",
+  "Strong" = "gray60",
+  "Severe" = "gray60",
+  "Extreme" = "gray60"
+)
+
+fillColCat <- c(
+  "Moderate" = "#ffc866",
+  "Strong" = "#ff6900",
+  "Severe" = "#9e0000",
+  "Extreme" = "#2d0000"
+)
+
+#png("SST_ESR/2020/EBS/Watson_Fig5_010421.png",width=7,height=5,units="in",res=300)
+png("MHW_011821_zoom_new.png",width=7,height=5,units="in",res=300)
+ggplot(data = clim_cat %>% filter(t>=as.Date("2020-09-01")), aes(x = t, y = temp)) +
+  geom_flame(aes(y2 = thresh, fill = "Moderate")) +
+  geom_flame(aes(y2 = thresh_2x, fill = "Strong")) +
+  geom_flame(aes(y2 = thresh_3x, fill = "Severe")) +
+  geom_flame(aes(y2 = thresh_4x, fill = "Extreme")) +
+  geom_line(aes(y = thresh_2x, col = "Strong"), size = 0.5, linetype = "dotted") +
+  geom_line(aes(y = thresh_3x, col = "Severe"), size = 0.5, linetype = "dotted") +
+  geom_line(aes(y = thresh_4x, col = "Extreme"), size = 0.5, linetype = "dotted") +
+  geom_line(aes(y = seas, col = "Climatology"), size = 0.5) +
+  geom_line(aes(y = thresh, col = "Moderate"), size = 0.5,linetype= "dotted") +
+  geom_line(aes(y = temp, col = "Temperature"), size = 0.5) +
+  scale_colour_manual(name = NULL, values = lineColCat,
+                      breaks = c("Temperature", "Climatology", "Moderate",
+                                 "Strong", "Severe", "Extreme")) +
+  scale_fill_manual(name = NULL, values = fillColCat, guide = FALSE) +
+  scale_x_date(date_labels = "%b %Y",expand=c(0.01,0)) +
+  guides(colour = guide_legend(override.aes = list(linetype = c("solid", "solid", "dotted",
+                                                                "dotted", "dotted", "dotted"),
+                                                   size = c(0.6, 0.7, 0.7, 0.7, 0.7, 0.7)),
+                               ncol=6)) +
+  labs(y = "Sea Surface Temperature (°C)", x = NULL) + 
+  theme(legend.position="none") +
+  facet_wrap(~region,ncol=1,scales="free_y") +
+  mytheme + 
+  theme(#legend.position="top",
+        legend.key=element_blank(),
+        legend.text = element_text(size=10),
+        axis.title.x=element_blank(),
+        legend.margin=margin(l=-2.75,t = -8.5, unit='cm'),
+        plot.margin=unit(c(0.65,0,0.0,0),"cm"))
+dev.off()
+```
+
+We can look at heat waves over a longer period of time more easily by summing the number of days in each year and season during which heatwaves occurred. We start with the Fall that started in September 1985 and go through the summer season that ended in 2020. Baseline period for MHW calculation was 09/1985 - 08/2015.       
+
+```{r, echo=FALSE,message=F}
+
+mhw_nbs <- (detect_event(ts2clm(readRDS("Data/crwsst_bering_19850401_through_110520.RDS") %>%
+                              filter(Ecosystem_sub=="Northern Bering Sea") %>% 
+                              rename(t=date,temp=meansst) %>% 
+                              arrange(t), climatologyPeriod = c("1985-09-01", "2015-08-31"))))$event %>% 
+  mutate(region="Northern Bering Sea") %>% 
+  data.frame
+
+mhw_ebs <- ((detect_event(ts2clm(readRDS("Data/crwsst_bering_19850401_through_110520.RDS") %>%
+                                   filter(Ecosystem_sub=="Southeastern Bering Sea") %>% 
+                                   rename(t=date,temp=meansst) %>% 
+                                   arrange(t), climatologyPeriod = c("1986-09-01", "2015-08-31"))))$event %>% 
+              mutate(region="Southeastern Bering Sea")) %>% 
+  data.frame
+
+annualevents <- lapply(1:nrow(mhw_nbs),function(x)data.frame(date=seq.Date(as.Date(mhw_nbs[x,"date_start"]),as.Date(mhw_nbs[x,"date_end"]),"days"))) %>% 
+  bind_rows() %>% 
+  mutate(region="Northern Bering Sea") %>% 
+  bind_rows(lapply(1:nrow(mhw_ebs),function(x)data.frame(date=seq.Date(as.Date(mhw_ebs[x,"date_start"]),as.Date(mhw_ebs[x,"date_end"]),"days"))) %>% 
+  bind_rows() %>% 
+  mutate(region="Southeastern Bering Sea")) %>% 
+  #distinct() %>% 
+  mutate(year=year(date),
+         month=month(date),
+         year2=ifelse(month>=9,year+1,year)) %>% 
+  dplyr::select(region,year,month,year2) %>% 
+  group_by(year2,region) %>% 
+  summarise(Fall=length(month[month%in%c(9,10,11)]),
+            Winter=length(month[month%in%c(12,1,2)]),
+            Spring=length(month[month%in%c(3,4,5)]),
+            Summer=length(month[month%in%c(6,7,8)])) %>% 
+  right_join(data.frame(year2=1985:2020)) %>% 
+  replace_na(list(Fall=0,Winter=0,Spring=0,Summer=0)) %>% 
+  arrange(year2) %>% 
+  filter(!is.na(region))
+
+png("SST_ESR/2020/EBS/Watson_Fig6.png",width=6,height=3.375,units="in",res=300)
+annualevents %>% 
+  gather(Period,Duration,-c(year2,region)) %>% 
+  data.frame %>% 
+  mutate(Period=fct_relevel(Period,"Summer","Fall","Winter","Spring")) %>% 
+  #filter(Period!="totaldays") %>% 
+  ggplot() +
+  geom_bar(aes(year2,Duration,fill=Period),stat="identity") + 
+  scale_fill_manual(name="",labels=c("Summer","Fall","Winter","Spring"),values=c(OceansBlue2,Crustacean1,UrchinPurple1,WavesTeal1)) +
+  #geom_bar(aes(year2,totaldays),stat="identity",fill=OceansBlue2) + 
+  #geom_bar(aes(year2,winterdays),stat="identity",fill=Crustacean1) + 
+  mytheme + 
+  facet_wrap(~region) + 
+  scale_x_continuous(expand=c(0,0.5)) +
+  scale_y_continuous(limits=c(0,350),expand=c(0.0,0)) +
+  xlab("Year") + 
+  ylab("Number of Marine Heatwave Days") +
+  theme(plot.margin=unit(c(0.15,0.25,0.05,0),"cm"),
+        legend.position = c(0.1,0.85))
+dev.off()
+```
+
+
+
+
+
+
+
