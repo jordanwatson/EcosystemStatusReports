@@ -45,6 +45,22 @@ data <- httr::content(httr::GET('https://apex.psmfc.org/akfin/data_marts/akmp/ec
   rename(read_date=date) %>% 
   arrange(read_date) 
 
+data <- readRDS("../../ESR/Data/crwsst_ai_new_1985_through_20210901.RDS") %>% 
+  bind_rows %>% 
+  data.frame %>% 
+  filter(date<as.Date("2021-09-01")) %>% 
+  dplyr::select(date,meansst,esr_region=Ecosystem_sub) %>% 
+  mutate(doy=yday(date),
+         year=year(date),
+         month=month(date),
+         day=day(date),
+         newdate=as.Date(ifelse(month>=12,as.character(as.Date(paste("1999",month,day,sep="-"),format="%Y-%m-%d")),
+                                as.character(as.Date(paste("2000",month,day,sep="-"),format="%Y-%m-%d"))),format("%Y-%m-%d")),
+         year2=ifelse(month>=12,year+1,year),
+         esr_region=fct_relevel(esr_region,"Western Aleutians")) %>% 
+  rename(read_date=date) %>% 
+  arrange(read_date) 
+
 
 #----------------------------------------------------------------------------------------------------------------------------
 #  Figure 1. Temperature time series with years overlain (top of Twitter plot)
@@ -118,7 +134,7 @@ myplotfun <- function(region1,region2,region3){
   ggdraw(mylines_base)
 }
 
-png("SST_ESR/2021/AI/Figure_1_SST_AI_ESR_crwsst.png",width=6,height=3.375,units="in",res=300)
+png("SST_ESR/2021/AI/Figure_1_SST_AI_ESR_crwsst_new.png",width=6,height=3.375,units="in",res=300)
 myplotfun("Western Aleutians","Central Aleutians","Eastern Aleutians")
 dev.off()
 
@@ -159,7 +175,7 @@ dfmean <- df %>%
   summarise(meantrend=mean(trend[between(year,1985,2014)],na.rm=TRUE),
             sdtrend=sd(trend[between(year,1985,2014)],na.rm=TRUE))
 
-png("SST_ESR/2021/AI/Figure_2_SST_AI_ESR_TimeSeries.png",width=6,height=4,units="in",res=300)
+png("SST_ESR/2021/AI/Figure_2_SST_AI_ESR_TimeSeries_new.png",width=6,height=4,units="in",res=300)
 df %>% 
   ggplot(aes(x = date, y = trend)) + 
   geom_line() + 
@@ -230,7 +246,7 @@ fillColCat <- c(
   "Extreme" = "#2d0000"
 )
 
-png("SST_ESR/2021/AI/Figure_3_Flames.png",width=7,height=5,units="in",res=300)
+png("SST_ESR/2021/AI/Figure_3_Flames_new.png",width=7,height=5,units="in",res=300)
 ggplot(data = clim_cat %>% filter(t>=as.Date("2019-12-01")), aes(x = t, y = temp)) +
   geom_flame(aes(y2 = thresh, fill = "Moderate")) +
   geom_flame(aes(y2 = thresh_2x, fill = "Strong")) +
@@ -317,7 +333,7 @@ annualevents <- lapply(1:nrow(mhw_nbs),function(x)data.frame(date=seq.Date(as.Da
   arrange(year2) %>% 
   filter(!is.na(region))
 
-png("SST_ESR/2021/AI/Figure_4_MHW_days_season.png",width=6,height=3.375,units="in",res=300)
+png("SST_ESR/2021/AI/Figure_4_MHW_days_season_new.png",width=6,height=3.375,units="in",res=300)
 annualevents %>% 
   gather(Period,Duration,-c(year2,region)) %>% 
   data.frame %>% 
@@ -344,36 +360,54 @@ dev.off()
 #------------------------------------------------------------------------------------------------------------
 #  Create anomaly data to give to Ivonne. She'll make her own plots.
 
-# library(tidyverse)
-# library(lubridate)
-# library(httr)
-# 
-# data <- httr::content(httr::GET('https://apex.psmfc.org/akfin/data_marts/akmp/ecosystem_sub_crw_avg_sst?ecosystem_sub=Western%20Aleutians,Central%20Aleutians,Eastern%20Aleutians&start_date=19850401&end_date=20211231'), type = "application/json") %>% 
-#   bind_rows %>% # Combines all the downloaded data
-#   mutate(date=as_date(READ_DATE)) %>% # reformat the date
-#   data.frame %>% 
-#   dplyr::select(date,meansst=MEANSST,esr_region=ECOSYSTEM_SUB) %>% #streamline the fields
-#   mutate(year=year(date), #extract the date
-#          month=month(date), # extract the month
-#          year2=ifelse(month>=10,year+1,year), #because the seasons span multiple years, create a new year that aligns with the seasons
-#          season=ifelse(month>=10 | month<=3,"Winter","Summer"), # Define the seasons
-#          esr_region=fct_relevel(esr_region,"Western Aleutians")) %>%  #Reorder the seasons. 
-#   filter(year2>1985) %>% # Because the winter of 1985 is truncated; it only includes Jan-Mar. So exclude.
-#   group_by(esr_region,year2) %>% 
-#   summarise(meansst=mean(meansst)) %>% # Calculate the region-year average sst
-#   ungroup %>% 
-#   group_by(esr_region) %>% 
-#   mutate(anomaly=meansst-mean(meansst)) # Calculate the anomalies
-# 
-# # Plot it to see how it looks
-# data %>% 
-#   ggplot(aes(year2,anomaly)) + 
-#   geom_bar(stat="identity") + 
-#   facet_wrap(~esr_region,ncol=1)
-# 
-# # Save the data file
-# data %>% 
-#   write.csv("SST_ESR/2021/AI/Aleutians_sst_anomaly_08_18_21.csv",row.names = F)
+library(tidyverse)
+library(lubridate)
+library(httr)
+
+data <- httr::content(httr::GET('https://apex.psmfc.org/akfin/data_marts/akmp/ecosystem_sub_crw_avg_sst?ecosystem_sub=Western%20Aleutians,Central%20Aleutians,Eastern%20Aleutians&start_date=19850401&end_date=20211231'), type = "application/json") %>%
+  bind_rows %>% # Combines all the downloaded data
+  mutate(date=as_date(READ_DATE)) %>% # reformat the date
+  data.frame %>%
+  dplyr::select(date,meansst=MEANSST,esr_region=ECOSYSTEM_SUB) %>% #streamline the fields
+  mutate(year=year(date), #extract the date
+         month=month(date), # extract the month
+         year2=ifelse(month>=10,year+1,year), #because the seasons span multiple years, create a new year that aligns with the seasons
+         season=ifelse(month>=10 | month<=3,"Winter","Summer"), # Define the seasons
+         esr_region=fct_relevel(esr_region,"Western Aleutians")) %>%  #Reorder the seasons.
+  filter(year2>1985) %>% # Because the winter of 1985 is truncated; it only includes Jan-Mar. So exclude.
+  group_by(esr_region,year2) %>%
+  summarise(meansst=mean(meansst)) %>% # Calculate the region-year average sst
+  ungroup %>%
+  group_by(esr_region) %>%
+  mutate(anomaly=meansst-mean(meansst)) # Calculate the anomalies
+
+data <- readRDS("../../ESR/Data/crwsst_ai_new_1985_through_20210901.RDS") %>% 
+  bind_rows %>% 
+  filter(date<as.Date("2021-09-01")) %>% 
+  data.frame %>% 
+  dplyr::select(date,meansst,esr_region=Ecosystem_sub) %>% 
+  mutate(year=year(date), #extract the date
+         month=month(date), # extract the month
+         year2=ifelse(month>=10,year+1,year), #because the seasons span multiple years, create a new year that aligns with the seasons
+         season=ifelse(month>=10 | month<=3,"Winter","Summer"), # Define the seasons
+         esr_region=fct_relevel(esr_region,"Western Aleutians")) %>%  #Reorder the seasons.
+  filter(year2>1985) %>% # Because the winter of 1985 is truncated; it only includes Jan-Mar. So exclude.
+  group_by(esr_region,year2) %>%
+  summarise(meansst=mean(meansst)) %>% # Calculate the region-year average sst
+  ungroup %>%
+  group_by(esr_region) %>%
+  mutate(anomaly=meansst-mean(meansst)) # Calculate the anomalies
+
+
+# Plot it to see how it looks
+data %>%
+  ggplot(aes(year2,anomaly)) +
+  geom_bar(stat="identity") +
+  facet_wrap(~esr_region,ncol=1)
+
+# Save the data file
+data %>%
+  write.csv("SST_ESR/2021/AI/Aleutians_sst_anomaly_new.csv",row.names = F)
 # 
 # 
 # 

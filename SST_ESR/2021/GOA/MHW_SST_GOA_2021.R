@@ -241,7 +241,7 @@ annualevents <- lapply(1:nrow(mhw_nbs),function(x)data.frame(date=seq.Date(as.Da
   arrange(year2) %>% 
   filter(!is.na(region))
 
-png("SST_ESR/2021/GOA/Fir_3_MHW_days_season_2021.png",width=6,height=3.375,units="in",res=300)
+png("SST_ESR/2021/GOA/Fig_3_MHW_days_season_2021.png",width=6,height=3.375,units="in",res=300)
 annualevents %>% 
   gather(Period,Duration,-c(year2,region)) %>% 
   data.frame %>% 
