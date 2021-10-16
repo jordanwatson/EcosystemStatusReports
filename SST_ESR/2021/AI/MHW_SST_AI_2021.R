@@ -45,10 +45,10 @@ data <- httr::content(httr::GET('https://apex.psmfc.org/akfin/data_marts/akmp/ec
   rename(read_date=date) %>% 
   arrange(read_date) 
 
-data <- readRDS("../../ESR/Data/crwsst_ai_new_1985_through_20210901.RDS") %>% 
+data <- readRDS("../../ESR/Data/crwsst_ai_new_1985_through_20211011.RDS") %>% 
   bind_rows %>% 
   data.frame %>% 
-  filter(date<as.Date("2021-09-01")) %>% 
+  #filter(date<as.Date("2021-09-01")) %>% 
   dplyr::select(date,meansst,esr_region=Ecosystem_sub) %>% 
   mutate(doy=yday(date),
          year=year(date),
@@ -381,9 +381,9 @@ data <- httr::content(httr::GET('https://apex.psmfc.org/akfin/data_marts/akmp/ec
   group_by(esr_region) %>%
   mutate(anomaly=meansst-mean(meansst)) # Calculate the anomalies
 
-data <- readRDS("../../ESR/Data/crwsst_ai_new_1985_through_20210901.RDS") %>% 
+data <- readRDS("../../ESR/Data/crwsst_ai_new_1985_through_20211011.RDS") %>% 
   bind_rows %>% 
-  filter(date<as.Date("2021-09-01")) %>% 
+  #filter(date<as.Date("2021-09-01")) %>% 
   data.frame %>% 
   dplyr::select(date,meansst,esr_region=Ecosystem_sub) %>% 
   mutate(year=year(date), #extract the date
